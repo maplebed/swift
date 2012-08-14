@@ -128,5 +128,8 @@ if __name__ == '__main__':
                         (mount_point))
                     comment_fstab(mount_point)
                     unmounts += 1
+            else:
+                logger.info("Errors found but device unavailable: %s:%s" %
+                        (kernel_device, count))
     if unmounts == 0:
         logger.info("No drives were unmounted")
