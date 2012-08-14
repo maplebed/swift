@@ -14,6 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Exit codes:
+#  0  - no errors
+#  1  - syntax error in calling (eg no config file)
+#  2  - filesystems unmounted
+#  4  - errors found but device not unmounted
+#
+#  When multiple errors are found, exit code will be the bitwise OR of
+#  the errors found.
+
 import datetime
 import os
 import re
@@ -29,7 +38,10 @@ error_re = [
     re.compile(r'\berror\b.*\b(sd[a-z]{1,2}\d?)\b'),
     re.compile(r'\b(sd[a-z]{1,2}\d?)\b.*\berror\b'),
 ]
-
+# Exit code constants here
+error_syntax = 1
+error_unmounted = 2
+error_no_unmounting = 4
 
 def get_devices(device_dir, logger):
     devices = []
@@ -97,10 +109,10 @@ if __name__ == '__main__':
         conf_path = sys.argv[1]
     except Exception:
         print "Usage: %s CONF_FILE" % sys.argv[0].split('/')[-1]
-        sys.exit(1)
+        sys.exit(error_syntax)
     if not c.read(conf_path):
         print "Unable to read config file %s" % conf_path
-        sys.exit(1)
+        sys.exit(error_syntax)
     conf = dict(c.items('drive-audit'))
     device_dir = conf.get('device_dir', '/srv/node')
     minutes = int(conf.get('minutes', 60))
@@ -114,6 +126,7 @@ if __name__ == '__main__':
     errors = get_errors(minutes)
     logger.debug("Errors found: %s" % str(errors))
     unmounts = 0
+    exitcode = 0
     for kernel_device, count in errors.items():
         if count >= error_limit:
             device = \
@@ -128,8 +141,11 @@ if __name__ == '__main__':
                         (mount_point))
                     comment_fstab(mount_point)
                     unmounts += 1
+                    exitcode = exitcode | error_unmount
             else:
+                exitcode = exitcode | error_no_unmounting
                 logger.info("Errors found but device unavailable: %s:%s" %
                         (kernel_device, count))
     if unmounts == 0:
         logger.info("No drives were unmounted")
+    sys.exit(exitcode)
